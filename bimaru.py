@@ -17,7 +17,6 @@ from search import (
     recursive_best_first_search,
 )
 
-from numpy import *
 
 class BimaruState:
     state_id = 0
@@ -41,13 +40,13 @@ class Board:
         # TODO
         pass
 
-    def adjacent_vertical_values(self, row: int, col: int) -> (str, str):
+    def adjacent_vertical_values(self, row: int, col: int):
         """Devolve os valores imediatamente acima e abaixo,
         respectivamente."""
         # TODO
         pass
-        
-    def adjacent_horizontal_values(self, row: int, col: int) -> (str, str):
+
+    def adjacent_horizontal_values(self, row: int, col: int):
         """Devolve os valores imediatamente à esquerda e à direita,
         respectivamente."""
         # TODO
@@ -64,7 +63,18 @@ class Board:
             > from sys import stdin
             > line = stdin.readline().split()
         """
-        # TODO
+        hints = []
+        rows = sys.stdin.readline().split()[1:]
+        columns = sys.stdin.readline().split()[1:]
+
+        hint_num = sys.stdin.readline()
+
+        for _ in range(int(hint_num)):
+            hints.append(sys.stdin.readline().split()[1:])
+        
+        print("rows:", rows, "\ncolumns:", columns, "\nhints:", hints)
+
+        
         pass
 
     # TODO: outros metodos da classe
@@ -111,5 +121,10 @@ if __name__ == "__main__":
     # Usar uma técnica de procura para resolver a instância,
     # Retirar a solução a partir do nó resultante,
     # Imprimir para o standard output no formato indicado.
-    
+
+    board = Board()
+    board.parse_instance()
+
+
+
     pass
