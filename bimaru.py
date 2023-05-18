@@ -34,6 +34,11 @@ class BimaruState:
 
 class Board:
     """Representação interna de um tabuleiro de Bimaru."""
+    def __init__(self,rows: list, cols: list, board: list) -> None:
+        self.board = board
+        self.rows = rows
+        self.cols = cols
+        pass
 
     def get_value(self, row: int, col: int) -> str:
         """Devolve o valor na respetiva posição do tabuleiro."""
@@ -52,6 +57,21 @@ class Board:
         # TODO
         pass
 
+    def print_board(self):
+        for i in range(10):
+            line = ""
+            for j in range(10):
+                line += str(self.board[i][j]) + " "
+            
+            print(line + str(self.rows[i]))
+        line = ""
+        for i in range(10):
+            line += str(self.cols[i]) + " "
+        print(line)
+        pass
+
+            
+
     @staticmethod
     def parse_instance():
         """Lê o test do standard input (stdin) que é passado como argumento
@@ -65,17 +85,44 @@ class Board:
         """
         hints = []
         rows = sys.stdin.readline().split()[1:]
-        columns = sys.stdin.readline().split()[1:]
+        cols = sys.stdin.readline().split()[1:]
 
-        hint_num = sys.stdin.readline()
+        rows = [int(num) for num in rows]
+        cols = [int(num) for num in cols]
 
-        for _ in range(int(hint_num)):
+        hint_num = int(sys.stdin.readline())
+
+        for _ in range(hint_num):
             hints.append(sys.stdin.readline().split()[1:])
-        
-        print("rows:", rows, "\ncolumns:", columns, "\nhints:", hints)
+
+        board = [[" " for _ in range(10)] for _ in range(10)]
+        for i in range(len(hints)):
+            x = int(hints[i][0])
+            y = int(hints[i][1])
+            n = hints[i][2]
+            board[x][y] = n
+            if n != "W":
+                rows[x] -= 1
+                cols[y] -= 1
+            
+
+        for i in range(10):
+            if rows[i] == 0:
+                for j in range(10):
+                    if board[i][j] == " ":
+                        board[i][j] = "."
+            if cols[i] == 0:
+                for j in range(10):
+                    if board[j][i] == " ":
+                        board[j][i] = "."
 
         
-        pass
+
+        
+        print("rows:", rows, "\ncolumns:", cols, "\nhints:", hints)
+
+        
+        return Board(rows,cols,board)
 
     # TODO: outros metodos da classe
 
@@ -122,8 +169,8 @@ if __name__ == "__main__":
     # Retirar a solução a partir do nó resultante,
     # Imprimir para o standard output no formato indicado.
 
-    board = Board()
-    board.parse_instance()
+    x = Board.parse_instance()
+    x.print_board()
 
 
 
