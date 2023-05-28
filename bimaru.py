@@ -6,6 +6,7 @@
 # 00000 Nome1
 # 00000 Nome2
 
+import cProfile
 import sys
 import copy
 from search import (
@@ -30,7 +31,11 @@ class BimaruState:
     def __lt__(self, other):
         return self.id < other.id
 
-    # TODO: outros metodos da classe
+    def __eq__(self, other):
+        return self.board == other.board
+    
+    def __hash__(self):
+        return hash(self.board)
 
 
 class Board:
@@ -45,11 +50,29 @@ class Board:
         self.boats_cols = boats_cols
         self.bad_board = False
         self.boats_on_board = {
-         "1":0,
-         "2":0,
-         "3":0,
-         "4":0
-        }  #4 de x, 3 de xx, 2 de xxx, 1 de xxxx
+         "1": 0,
+         "2": 0,
+         "3": 0,
+         "4": 0
+        }  # 4 de x, 3 de xx, 2 de xxx, 1 de xxxx
+        # convert board to an immutable data type, so that it can be hashed
+        self.hashNum = 0
+        #self.hashNum = hash(tuple(tuple(row) for row in self.board))
+                
+        
+        
+    def __eq__(self, other):
+        if isinstance(other, Board):
+            if self.__hash__() != other.__hash__():
+                return False
+            return self.board == other.board    
+        return False 
+
+
+    def __hash__(self):
+        if self.hashNum == 0:
+            self.hashNum = hash(tuple(tuple(row) for row in self.board))
+        return self.hashNum
 
 
     def get_value(self, row: int, col: int) -> str:
@@ -151,7 +174,7 @@ class Board:
                 col = i[1]
                 self.initial_place_water_around_boat(row, col)
         self.check_boats_on_board()
-        #self.print_board()
+        self.print_board()
 
     def fill_water_row(self, row):
         #check if the row is full of boats
@@ -198,6 +221,7 @@ class Board:
                         self.board[i][j] = "."
                     elif self.board[i][j] not in (".", "W"):
                         self.bad_board = True
+                        
 
     def water_T_boat(self, row, col, size):
         for i in range(row - 1, row + size + 1):
@@ -387,6 +411,39 @@ class Board:
                     elif self.board[i][j+2] == "M" and self.board[i][j+3] == "B":
                         self.boats_on_board["4"] += 1
                 
+    def endgame(self):
+        for i in range(10):
+            n_row = 0
+            n_col = 0
+            for j in range(10):
+                if self.board[i][j] == " ":
+                    n_row += 1
+                if self.board[j][i] == " ":
+                    n_col += 1
+            if n_row == self.rows[i] - self.boats_rows[i]:
+                for j in range(10):
+                    if self.board[i][j] == " ":
+                        self.board[i][j] = "c"
+                        self.boats_rows[i] += 1
+                        self.boats_cols[j] += 1
+                        self.boats_on_board["1"] += 1
+                        self.place_water_around_boat(i,j,"C")
+                        self.fill_water_col(j)
+            if n_col == self.cols[i] - self.boats_cols[i]:
+                for j in range(10):
+                    if self.board[j][i] == " ":
+                        self.board[j][i] = "c"
+                        self.boats_rows[j] += 1
+                        self.boats_cols[i] += 1
+                        self.boats_on_board["1"] += 1
+                        self.place_water_around_boat(j,i,"C")
+                        self.fill_water_row(j)
+        if self.test_goal():
+            return True
+        else:
+            return False
+        
+
 
     def place_boat_hor(self, action: list):
         board1 = copy.deepcopy(self)
@@ -440,7 +497,7 @@ class Board:
         for i in range(10):
             for j in range(10):
                 if self.board[i][j] == " ":
-                    actions.append([i,j,1,"r"])
+                    actions.append([i,j,1,"d"])
         return actions
     
     def action_boat2(self):
@@ -496,12 +553,14 @@ class Board:
 
 class Bimaru(Problem):
     def __init__(self, board: Board):
+        self.previousStates = set()
         super().__init__(BimaruState(board))
 
     def goal_test(self, state: BimaruState):
         """Retorna True se e só se o estado passado como argumento é
         um estado objetivo. Deve verificar se todas as posições do tabuleiro
         estão preenchidas de acordo com as regras do problema."""
+        #state.board.print_board()
         return state.board.test_goal()
 
 
@@ -514,6 +573,11 @@ class Bimaru(Problem):
         if board.bad_board == True:
             return actions
 
+        #if state in self.previousStates:
+        #    return actions
+        #else:
+        #    self.previousStates.add(state)
+
         if board.boats_on_board["4"] < 1:
             actions += state.board.action_boat4()
         elif board.boats_on_board["3"] < 2:
@@ -521,8 +585,14 @@ class Bimaru(Problem):
         elif board.boats_on_board["2"] < 3:
             actions += state.board.action_boat2()
         elif board.boats_on_board["1"] < 4:
-            actions += state.board.action_boat1()
-
+            if state in self.previousStates:
+                return actions
+            else:
+                self.previousStates.add(state)
+            if state.board.endgame():
+                return [[0,0,0,"endgame"]]
+            else:
+                actions += state.board.action_boat1()
         return actions
             
 
@@ -537,6 +607,8 @@ class Bimaru(Problem):
             return BimaruState(state.board.place_boat_hor(action))
         elif action[3] == "d":
             return BimaruState(state.board.place_boat_ver(action))
+        else: 
+            return BimaruState(state.board)
 
  
     def h(self, node: Node):
@@ -559,6 +631,8 @@ if __name__ == "__main__":
     # Usar uma técnica de procura para resolver a instância,
     # Retirar a solução a partir do nó resultante,
     # Imprimir para o standard output no formato indicado.
+    #profile = cProfile.Profile()
+    #profile.enable()
 
     x = Board.parse_instance() 
     x.initial_check()
@@ -568,4 +642,7 @@ if __name__ == "__main__":
         res.state.board.print_board()
     else:
         print("board not printed")
-    pass
+    
+    #profile.disable()
+    #profile.print_stats(sort='time')
+
