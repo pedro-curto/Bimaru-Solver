@@ -35,11 +35,15 @@ class BimaruState:
 
 class Board:
     """Representação interna de um tabuleiro de Bimaru."""
-    def __init__(self,rows: list, cols: list, board: list, hints: list = []) -> None:
+    def __init__(self,rows: list, cols: list, board: list, boats_rows: list \
+                 ,boats_cols:list ,hints: list = []) -> None:
         self.board = board
         self.rows = rows
         self.cols = cols
         self.hints = hints
+        self.boats_rows = boats_rows
+        self.boats_cols = boats_cols
+        self.bad_board = False
         self.boats_on_board = {
          "1":0,
          "2":0,
@@ -71,13 +75,13 @@ class Board:
         for i in range(10):
             line = ""
             for j in range(10):
-                line += str(self.board[i][j]) + " "
+                line += self.board[i][j]
             
-            print(line + str(self.rows[i]))
-        line = ""
-        for i in range(10):
-            line += str(self.cols[i]) + " "
-        print(line)
+            print(line) #+ str(self.rows[i]))
+        #line = ""
+        #for i in range(10):
+        #    line += str(self.cols[i]) + " "
+        #print(line)
 
     @staticmethod
     def parse_instance():
@@ -92,20 +96,14 @@ class Board:
         """
             
         hints = []
-        # with open("instance01.txt") as f:
-
-        #     rows = f.readline().split()[1:]
-        #     cols = f.readline().split()[1:]
-        #     hint_num = int(f.readline())
-        #     for _ in range(hint_num):
-        #         hints.append(f.readline().split()[1:])
-
 
         rows = sys.stdin.readline().split()[1:]
         cols = sys.stdin.readline().split()[1:]
         
         rows = [int(num) for num in rows]
         cols = [int(num) for num in cols]
+        boats_rows = [0 for _ in range(10)]
+        boats_cols = [0 for _ in range(10)]
 
         hint_num = int(sys.stdin.readline())
         for _ in range(hint_num):
@@ -115,15 +113,19 @@ class Board:
             hints[i][0] = int(hints[i][0])
             hints[i][1] = int(hints[i][1])
 
-
         board = [[" " for _ in range(10)] for _ in range(10)]
+
         for h in hints:
             x = h[0]
             y = h[1]
             n = h[2]
             board[x][y] = n
+            if n != "W":
+                boats_rows[x] += 1
+                boats_cols[y] += 1
+                
 
-        return Board(rows,cols,board,hints)
+        return Board(rows, cols, board, boats_rows, boats_cols, hints)
 
     def test_goal(self):
         #TODO falta implementar o numero de barcos total
@@ -134,17 +136,7 @@ class Board:
             return False
 
         for i in range(10):
-            n_row = 0
-            n_col = 0
-            for j in range(10):
-                if self.board[i][j] == " ":
-                    return False
-                else:
-                    if self.board[i][j] != "W" and self.board[i][j] != ".":
-                        n_row += 1
-                    if self.board[j][i] != "W" and self.board[j][i] != ".":
-                        n_col += 1
-            if n_row != self.rows[i] or n_col != self.cols[i]:
+            if self.rows[i] != self.boats_rows[i] or self.cols[i] != self.boats_cols[i]:
                 return False
         return True
 
@@ -157,35 +149,86 @@ class Board:
             if i[2] != "W":
                 row = i[0]
                 col = i[1]
-                self.place_water_around_boat(row, col)
+                self.initial_place_water_around_boat(row, col)
         self.check_boats_on_board()
+        #self.print_board()
+
+    def fill_water_row(self, row):
+        #check if the row is full of boats
+        if self.rows[row] == self.boats_rows[row]:
+            for i in range(10):
+                if self.board[row][i] == " ":
+                    self.board[row][i] = "."
+
+    def fill_water_col(self, col):
+        #check if the col is full of boats
+        if self.cols[col] == self.boats_cols[col]:
+            for i in range(10):
+                if self.board[i][col] == " ":
+                    self.board[i][col] = "."
 
     def fill_water(self):
+        #this is done 1 time, in the initial check
         for i in range(10):
-            n_boats_row = 0
-            n_boats_col = 0
-            for j in range(10):
-                if self.board[i][j] != "W" and self.board[i][j] != "." and self.board[i][j] != " ":
-                    n_boats_row += 1
-                if self.board[j][i] != "W" and self.board[j][i] != "." and self.board[j][i] != " ":
-                    n_boats_col += 1
-            if n_boats_row == self.rows[i]:
+            if self.rows[i] == self.boats_rows[i]:
                 for j in range(10):
                     if self.board[i][j] == " ":
                         self.board[i][j] = "."
-            if n_boats_col == self.cols[i]:
+            if self.cols[i] == self.boats_cols[i]:
                 for j in range(10):
                     if self.board[j][i] == " ":
                         self.board[j][i] = "."
-
-    def place_water_around_boat(self, row: int, col: int):
-        boat = self.board[row][col]
+    
+            
+    def place_water_around_boat(self, row: int, col: int, boat: str, size = 0):
         if boat == "C":
+            self.water_C_boat(row, col)
+        elif boat == "T":
+            self.water_T_boat(row, col, size)
+        elif boat == "L":
+            self.water_L_boat(row, col, size)
+
+    
+    def water_C_boat(self, row, col):
+        for i in range(row - 1, row + 2):
+            for j in range(col - 1, col + 2):
+                if i >= 0 and i < 10 and j >= 0 and j < 10 and \
+                    not (i == row and j == col):
+                    if self.board[i][j] == " ":
+                        self.board[i][j] = "."
+                    elif self.board[i][j] not in (".", "W"):
+                        self.bad_board = True
+
+    def water_T_boat(self, row, col, size):
+        for i in range(row - 1, row + size + 1):
+            for j in range(col - 1, col + 2):
+                if i >= 0 and i < 10 and j >= 0 and j < 10:
+                    if not (j == col and i >= row and i < row + size):
+                        if self.board[i][j] == " ":
+                            self.board[i][j] = "."
+                        elif self.board[i][j] not in (".", "W"):
+                            self.bad_board = True
+
+    def water_L_boat(self, row, col, size):
+        for i in range(row - 1, row + 2):
+            for j in range(col - 1, col + size + 1):
+                if i >= 0 and i < 10 and j >= 0 and j < 10:
+                    if not (i == row and j >= col and j < col + size):
+                        if self.board[i][j] == " ":
+                            self.board[i][j] = "."
+                        elif self.board[i][j] not in (".", "W"):
+                            self.bad_board = True
+
+
+    def initial_place_water_around_boat(self, row: int, col: int):
+        boat = self.board[row][col]
+        if boat == "C": 
             for i in range(row - 1, row + 2):
                 for j in range(col - 1, col + 2):
                     if i >= 0 and i < 10 and j >= 0 and j < 10:
                         if self.board[i][j] == " ":
                             self.board[i][j] = "."
+
         elif boat == "T":
             for i in range(row - 1, row + 3):
                 for j in range(col - 1, col + 2):
@@ -193,8 +236,14 @@ class Board:
                         if not (j == col and i > row):
                             if self.board[i][j] == " ":
                                 self.board[i][j] = "."
-            #if self.board[row+1][col] == " ":
-            #    self.board[row+1][col] = "?"
+            if self.board[row+1][col] == " ":
+                self.board[row+1][col] = "?"
+                self.boats_cols[col] += 1
+                self.boats_rows[row+1] += 1
+                self.fill_water_col(col)
+                self.fill_water_row(row+1)
+            
+
         elif boat == "B":
             for i in range(row - 2, row + 2):
                 for j in range(col - 1, col + 2):
@@ -202,8 +251,13 @@ class Board:
                         if not (j == col and i < row):
                             if self.board[i][j] == " ":
                                 self.board[i][j] = "."
-            #if self.board[row-1][col] == " ":
-            #    self.board[row-1][col] = "?"
+            if self.board[row-1][col] == " ":
+                self.board[row-1][col] = "?"
+                self.boats_cols[col] += 1
+                self.boats_rows[row-1] += 1
+                self.fill_water_col(col)
+                self.fill_water_row(row-1)
+
         elif boat == "R":
             for i in range(row - 1, row + 2):
                 for j in range(col - 2, col + 2):
@@ -211,8 +265,13 @@ class Board:
                         if not (i == row and j < col):
                             if self.board[i][j] == " ":
                                 self.board[i][j] = "."
-            #if self.board[row][col-1] == " ":
-            #    self.board[row][col-1] = "?"
+            if self.board[row][col-1] == " ":
+                self.board[row][col-1] = "?"
+                self.boats_cols[col-1] += 1
+                self.boats_rows[row] += 1
+                self.fill_water_col(col-1)
+                self.fill_water_row(row)
+
         elif boat == "L":
             for i in range(row - 1, row + 2):
                 for j in range(col - 1, col + 3):
@@ -220,72 +279,82 @@ class Board:
                         if not (i == row and j > col):
                             if self.board[i][j] == " ":
                                 self.board[i][j] = "."
-            #if self.board[row][col+1] == " ":
-            #    self.board[row][col+1] = "?"
+            if self.board[row][col+1] == " ":
+                self.board[row][col+1] = "?"
+                self.boats_cols[col+1] += 1
+                self.boats_rows[row] += 1
+                self.fill_water_col(col+1)
+                self.fill_water_row(row)
 
         elif boat == "M":
-            if self.board[row - 1][col] == "." or self.board[row + 1][col] == ".":
+            # checks if there is water above or under the piece
+            if  row - 1 == -1 or row + 1 == 10 or \
+                self.board[row - 1][col] == "." or self.board[row + 1][col] == ".":
                 for i in range(row - 1, row + 2):
                     for j in range(col - 2, col + 3):
                         if i >= 0 and i < 10 and j >= 0 and j < 10 and i != row:
                             if self.board[i][j] == " ":
                                 self.board[i][j] = "."
-                #if self.board[row][col+1] == " ":
-                #    self.board[row][col+1] = "?"
-                #if self.board[row][col-1] == " ":
-                #    self.board[row][col-1] = "?"
+                # adds pieces if the up/down cell is empty
+                if self.board[row][col+1] == " ":
+                    self.board[row][col+1] = "?"
+                    self.boats_cols[col+1] += 1
+                    self.boats_rows[row] += 1
+                    self.fill_water_col(col+1)
+                if self.board[row][col-1] == " ":
+                    self.board[row][col-1] = "?"
+                    self.boats_cols[col-1] += 1
+                    self.boats_rows[row] += 1
+                    self.fill_water_col(col-1)
+                self.fill_water_row(row)
 
-            elif self.board[row][col - 1] == "." or self.board[row][col + 1] == ".":
+            # checks if there is water to the left or to the right of the piece
+            elif col - 1 == -1 or col + 1 == 10 or \
+                self.board[row][col - 1] == "." or self.board[row][col + 1] == ".":
                 for i in range(row - 2, row + 3):
                     for j in range(col - 1, col + 2):
                         if i >= 0 and i < 10 and j >= 0 and j < 10 and j != col:
                             if self.board[i][j] == " ":
                                 self.board[i][j] = "."
-                #if self.board[row+1][col] == " ":
-                #    self.board[row+1][col] = "?"
-                #if self.board[row-1][col] == " ":
-                #    self.board[row-1][col] = "?"
+                # adds pieces if the left/right cell is empty
+                if self.board[row+1][col] == " ":
+                    self.board[row+1][col] = "?"
+                    self.boats_cols[col] += 1
+                    self.boats_rows[row+1] += 1
+                    self.fill_water_row(row+1)
+                if self.board[row-1][col] == " ":
+                    self.board[row-1][col] = "?"
+                    self.boats_cols[col] += 1
+                    self.boats_rows[row-1] += 1
+                    self.fill_water_row(row-1)
+                self.fill_water_col(col)
 
     def check_boats_on_board(self):
-        to_remove = []
         for h in self.hints:
-            if h[2] == "W":
-                to_remove += [h]
-            else:
-                i = int(h[0])
-                j = int(h[1])
-                n = h[2]
-                if n == "C":
-                    self.boats_on_board["1"] += 1
-                    to_remove += [h]
-                elif n == "T":
-                    if self.board[i+1][j] == "B":
-                        self.boats_on_board["2"] += 1
-                        to_remove += (h, [i+1, j, "B"])
-                    elif self.board[i+1][j] == "M":
-                        if self.board[i+2][j] == "B":
-                            self.boats_on_board["3"] += 1
-                            to_remove += (h, [i+1, j, "M"], [i+2, j, "B"])
-                        elif self.board[i+2][j] == "M" and self.board[i+3][j] == "B":
-                            to_remove += (h, [i+1, j, "M"], [i+2, j, "M"], [i+3, j, "B"])
-                            self.boats_on_board["4"] += 1
+            i = int(h[0])
+            j = int(h[1])
+            n = h[2]
+            if n == "C":
+                self.boats_on_board["1"] += 1
+                self.place_water_around_boat(i, j, n)
+            elif n == "T":
+                if self.board[i+1][j] == "B":
+                    self.boats_on_board["2"] += 1
+                elif self.board[i+1][j] == "M":
+                    if self.board[i+2][j] == "B":
+                        self.boats_on_board["3"] += 1
+                    elif self.board[i+2][j] == "M" and self.board[i+3][j] == "B":
+                        self.boats_on_board["4"] += 1
 
-                elif n == "L":
-                    if self.board[i][j+1] == "R":
-                        to_remove += (h, [i, j+1, "R"])
-                        self.boats_on_board["2"] += 1
-                    elif self.board[i][j+1] == "M":
-                        if self.board[i][j+2] == "B":
-                            to_remove += (h, [i, j+1, "M"], [i, j+2, "R"])
-                            self.boats_on_board["3"] += 1
-                        elif self.board[i][j+2] == "M" and self.board[i][j+3] == "B":
-                            to_remove += (h, [i, j+1, "M"], [i, j+2, "M"], [i, j+3, "R"])
-                            self.boats_on_board["4"] += 1
-        print(to_remove)
-        for item in to_remove:
-            self.hints.remove(item)
+            elif n == "L":
+                if self.board[i][j+1] == "R":
+                    self.boats_on_board["2"] += 1
+                elif self.board[i][j+1] == "M":
+                    if self.board[i][j+2] == "B":
+                        self.boats_on_board["3"] += 1
+                    elif self.board[i][j+2] == "M" and self.board[i][j+3] == "B":
+                        self.boats_on_board["4"] += 1
                 
-
 
     def place_boat_hor(self, action: list):
         board1 = copy.deepcopy(self)
@@ -297,10 +366,18 @@ class Board:
         for i in range(boat_size):
             if board1.board[row][col+i] == " ":
                 board1.board[row][col+i] = boat[boat_size-1][i]
+                board1.fill_water_col(col+i)
+                board1.boats_cols[col+i] += 1
+                board1.boats_rows[row] += 1
+            elif board1.board[row][col+i] == "?":
+                board1.board[row][col+i] = boat[boat_size-1][i]
+            
+
+        board1.fill_water_row(row)
 
         board1.boats_on_board[str(boat_size)] += 1
+        board1.water_L_boat(row, col, boat_size)
         board1.fill_water()
-
         return board1
 
     def place_boat_ver(self, action: list):
@@ -313,11 +390,80 @@ class Board:
         for i in range(boat_size):
             if board1.board[row+i][col] == " ":
                 board1.board[row+i][col] = boat[boat_size-1][i]
+                board1.fill_water_row(row+i)
+                board1.boats_cols[col] += 1
+                board1.boats_rows[row+i] += 1
+            elif board1.board[row+i][col] == "?":
+                board1.board[row+i][col] = boat[boat_size-1][i]
+        
+        board1.fill_water_col(col)
         
         board1.boats_on_board[str(boat_size)] += 1
+        board1.water_T_boat(row, col, boat_size)
         board1.fill_water()
-
         return board1
+
+    def action_boat1(self):
+        actions = []
+        for i in range(10):
+            for j in range(10):
+                if self.board[i][j] == " ":
+                    actions.append([i,j,1,"r"])
+        return actions
+    
+    def action_boat2(self):
+        actions = []
+        for i in range(10):
+            for j in range(9):
+                if self.rows[i] >= 2:
+                    val = self.board[i][j]
+                    if self.board[i][j] in (" ", "?", "L"):
+                        if self.board[i][j+1] in (" ", "?", "R"):
+                            actions.append([i,j,2,"r"])
+                if self.cols[i] >= 2:
+                    val = self.board[j][i]
+                    if self.board[j][i] in (" ", "?", "T"):
+                        if self.board[j+1][i] in (" ", "?", "B"):
+                            actions.append([j,i,2,"d"])
+        return actions
+    
+    def action_boat3(self):
+        actions = []
+        for i in range(10):
+            for j in range(8):
+                if self.rows[i] >= 3:
+                    val = self.board[i][j]
+                    if self.board[i][j] in (" ", "?", "L"):
+                        if self.board[i][j+1] in (" ", "?", "M"):
+                            if self.board[i][j+2] in (" ", "?", "R"):
+                                actions.append([i,j,3,"r"])
+                if self.cols[i] >= 3:
+                    val = self.board[j][i]
+                    if self.board[j][i] in (" ", "?", "T"):
+                        if self.board[j+1][i] in (" ", "?", "M"):
+                            if self.board[j+2][i] in (" ", "?", "B"):
+                                actions.append([j,i,3,"d"])
+        return actions
+
+    def action_boat4(self):
+        actions = []
+        for i in range(10):
+            for j in range(7): #10 - 4 + 1
+                if self.rows[i] >= 4:
+                    val = self.board[i][j]
+                    if self.board[i][j] in (" ", "?", "L"):
+                        if self.board[i][j+1] in (" ", "?", "M"):
+                            if self.board[i][j+2] in (" ", "?", "M"):
+                                if self.board[i][j+3] in (" ", "?", "R"):
+                                    actions.append([i,j,4,"r"])
+                if self.cols[i] >= 4:
+                    val = self.board[j][i]
+                    if self.board[j][i] in (" ", "?", "T"):
+                        if self.board[j+1][i] in (" ", "?", "M"):
+                            if self.board[j+2][i] in (" ", "?", "M"):
+                                if self.board[j+3][i] in (" ", "?", "B"):
+                                    actions.append([j,i,4,"d"])
+        return actions
 
         
                 
@@ -339,17 +485,17 @@ class Bimaru(Problem):
         board = state.board
         actions = []
 
-        #if state.board.hints != []:
-        #    return self.actions_hints(state.board)
-  
+        if board.bad_board == True:
+            return actions
+
         if board.boats_on_board["4"] < 1:
-            actions += self.action_boat(board, 4)
+            actions += state.board.action_boat4()
         elif board.boats_on_board["3"] < 2:
-            actions += self.action_boat(board, 3)
+            actions += state.board.action_boat3()
         elif board.boats_on_board["2"] < 3:
-            actions += self.action_boat(board, 2)
+            actions += state.board.action_boat2()
         elif board.boats_on_board["1"] < 4:
-            actions += self.action_boat(board, 1)
+            actions += state.board.action_boat1()
 
         return actions
             
@@ -369,7 +515,6 @@ class Bimaru(Problem):
  
     def h(self, node: Node):
         """Função heuristica utilizada para a procura A*."""
-        #????????????????????????????????????????????????????????????????????????????????????????????
         #TODO
         n = 0
         for i in range(10):
@@ -380,79 +525,6 @@ class Bimaru(Problem):
 
     # TODO: outros metodos da classe
 
-    def actions_hints(self, board: Board):
-        actions = []
-        for h in board.hints:
-            x = h[0]
-            y = h[1]
-            if h[2] == "L" and (board[x][y+1] in (" ", "?")):
-                for n in range(2,5):
-                    if y + n-1 < 10 and board.boats_on_board[str(n)] < 5-n and board.rows[x] >= n:
-                        actions += [(x, y, n, "r")]
-            elif h[2] == "R" and (board[x][y-1] in (" ", "?")):
-                for n in range(2,5):
-                    if y - n+1 > 0 and board.boats_on_board[str(n)] < 5-n and board.rows[x] >= n:
-                        actions += [(x, y-n+1, n, "r")]
-                #actions = [(x, y-1, 2, "r"), (x, y-2, 3, "r"), (x, y-3, 4, "r")]
-            elif h[2] == "T" and (board[x+1][y] in (" ", "?")):
-                for n in range(2,5):
-                    if x + n-1 and board.boats_on_board[str(n)] < 5-n and board.cols[y] >= n:
-                        actions += [(x, y, n, "d")]
-                #actions = [(x, y, 2, "d"), (x, y, 3, "d"), (x, y, 4, "d")]
-            elif h[2] == "B" and (board[x-1][y] in (" ", "?")):
-                for n in range(2,5):
-                    if x - n+1 and board.boats_on_board[str(n)] < 5-n and board.cols[y] >= n:
-                        actions += [(x-n+1, y, n, "d")]
-                #actions = [(x-1, y, 2, "d"), (x-2, y, 3, "d"), (x-3, y, 4, "d")]
-            elif h[2] == "M" and (board[x][y+1] in (" ", "?")) and (board[x][y-1] in (" ", "?")):
-                actions += [(x, y-1, 3, "d")]
-                if x - n+1 and board.boats_on_board[str(n)] < 5-n and board.cols[y] >= n:
-                    actions += [(x-n+1, y, n, "d")]
-
-
-
-    def action_boat(self, board: Board, n):
-        actions = []
-
-        for i in range(10):
-            if board.rows[i] >= n or board.cols[i] >= n:
-                k_row = 0
-                k_col = 0
-                for j in range(10):
-                    #rows
-                    row_val = board.get_value(i, j)
-                    col_val = board.get_value(j, i)
-
-                    if row_val == " ":
-                        k_row += 1
-                        if k_row >= n and board.rows[i] >= n:
-                            actions.append((i, j-n+1, n, "r"))
-                    elif (row_val == "L" and k_row == 0) or \
-                            (row_val == "M" and k_row in (1, 2)):
-                            k_row += 1
-                    elif row_val == "R" and k_row in (1, 2, 3):
-                        k_row += 1
-                        if k_row >= n and board.rows[i] >= n:
-                            actions.append((i, j-n+1, n, "r"))
-                        k_row = 0
-                    else:
-                        k_row = 0
-                    #cols
-                    if col_val == " ":
-                        k_col += 1
-                        if k_col >= n and board.cols[i] >= n:
-                            actions.append((j-n+1, i, n, "d"))
-                    elif (col_val == "T" and k_col == 0) or \
-                            (col_val == "M" and k_col in (1, 2)):
-                            k_col += 1
-                    elif col_val == "B" and k_col in (1, 2, 3):
-                        k_col += 1
-                        if k_col >= n and board.cols[i] >= n:
-                            actions.append((j-n+1, i, n, "d"))
-                        k_col = 0
-                    else:
-                        k_col = 0
-        return actions
 
 
 if __name__ == "__main__":
@@ -464,11 +536,10 @@ if __name__ == "__main__":
 
     x = Board.parse_instance() 
     x.initial_check()
-    x.print_board()
     problem = Bimaru(x)
     res = depth_first_tree_search(problem)
     if res:
         res.state.board.print_board()
     else:
-        print("po crlh")
+        print("board not printed")
     pass
