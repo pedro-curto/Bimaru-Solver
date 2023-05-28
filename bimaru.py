@@ -208,6 +208,14 @@ class Board:
                             self.board[i][j] = "."
                         elif self.board[i][j] not in (".", "W"):
                             self.bad_board = True
+        if row - 1 >= 0:
+            self.check_row_incomplete(row - 1)
+        if row + 1 < 10:
+            self.check_row_incomplete(row + 1)
+        if col - 1 >= 0:
+            self.check_col_incomplete(col - 1)
+        if col + size < 10:
+            self.check_col_incomplete(col + size)
 
     def water_L_boat(self, row, col, size):
         for i in range(row - 1, row + 2):
@@ -218,6 +226,30 @@ class Board:
                             self.board[i][j] = "."
                         elif self.board[i][j] not in (".", "W"):
                             self.bad_board = True
+        if col - 1 >= 0:
+            self.check_col_incomplete(col - 1)
+        if col + 1 < 10:
+            self.check_col_incomplete(col + 1)
+        if row - 1 >= 0:
+            self.check_row_incomplete(row - 1)
+        if row + size < 10:
+            self.check_row_incomplete(row + size)
+
+    def check_row_incomplete(self, row):
+        n_spaces_left = 0
+        for i in range(10):
+            if self.board[row][i] == " ":
+                n_spaces_left += 1
+        if n_spaces_left < self.rows[row] - self.boats_rows[row]:
+            self.bad_board = True
+
+    def check_col_incomplete(self, col):
+        n_spaces_left = 0
+        for i in range(10):
+            if self.board[i][col] == " ":
+                n_spaces_left += 1
+        if n_spaces_left < self.cols[col] - self.boats_cols[col]:
+            self.bad_board = True
 
 
     def initial_place_water_around_boat(self, row: int, col: int):
@@ -416,12 +448,10 @@ class Board:
         for i in range(10):
             for j in range(9):
                 if self.rows[i] >= 2:
-                    val = self.board[i][j]
                     if self.board[i][j] in (" ", "?", "L"):
                         if self.board[i][j+1] in (" ", "?", "R"):
                             actions.append([i,j,2,"r"])
                 if self.cols[i] >= 2:
-                    val = self.board[j][i]
                     if self.board[j][i] in (" ", "?", "T"):
                         if self.board[j+1][i] in (" ", "?", "B"):
                             actions.append([j,i,2,"d"])
@@ -432,13 +462,11 @@ class Board:
         for i in range(10):
             for j in range(8):
                 if self.rows[i] >= 3:
-                    val = self.board[i][j]
                     if self.board[i][j] in (" ", "?", "L"):
                         if self.board[i][j+1] in (" ", "?", "M"):
                             if self.board[i][j+2] in (" ", "?", "R"):
                                 actions.append([i,j,3,"r"])
                 if self.cols[i] >= 3:
-                    val = self.board[j][i]
                     if self.board[j][i] in (" ", "?", "T"):
                         if self.board[j+1][i] in (" ", "?", "M"):
                             if self.board[j+2][i] in (" ", "?", "B"):
@@ -450,14 +478,12 @@ class Board:
         for i in range(10):
             for j in range(7): #10 - 4 + 1
                 if self.rows[i] >= 4:
-                    val = self.board[i][j]
                     if self.board[i][j] in (" ", "?", "L"):
                         if self.board[i][j+1] in (" ", "?", "M"):
                             if self.board[i][j+2] in (" ", "?", "M"):
                                 if self.board[i][j+3] in (" ", "?", "R"):
                                     actions.append([i,j,4,"r"])
                 if self.cols[i] >= 4:
-                    val = self.board[j][i]
                     if self.board[j][i] in (" ", "?", "T"):
                         if self.board[j+1][i] in (" ", "?", "M"):
                             if self.board[j+2][i] in (" ", "?", "M"):
