@@ -6,7 +6,6 @@
 # 00000 Nome1
 # 00000 Nome2
 
-import cProfile
 import sys
 import copy
 from search import (
@@ -17,6 +16,7 @@ from search import (
     depth_first_tree_search,
     greedy_search,
     recursive_best_first_search,
+    compare_searchers,
 )
 
 
@@ -40,12 +40,11 @@ class BimaruState:
 
 class Board:
     """Representação interna de um tabuleiro de Bimaru."""
-    def __init__(self,rows: list, cols: list, board: list, boats_rows: list \
-                 ,boats_cols:list ,hints: list = []) -> None:
+    def __init__(self, rows: list, cols: list, board: list, boats_rows: list \
+                 , boats_cols:list) -> None:
         self.board = board
         self.rows = rows
         self.cols = cols
-        self.hints = hints
         self.boats_rows = boats_rows
         self.boats_cols = boats_cols
         self.bad_board = False
@@ -78,21 +77,56 @@ class Board:
     def get_value(self, row: int, col: int) -> str:
         return self.board[row][col]
 
-    def adjacent_vertical_values(self, row: int, col: int) -> (str, str):
-        if row == 0:
-            return ("", self.board[row + 1][col])
-        elif row == 9:
-            return (self.board[row - 1][col], "")
-        else:
-            return (self.board[row - 1][col], self.board[row + 1][col])
 
-    def adjacent_horizontal_values(self, row: int, col: int) -> (str, str):
-        if col == 0:
-            return ("", self.board[row][col + 1])
-        elif col == 9:
-            return (self.board[row][col - 1], "")
+    def adjacent_cell_values(self, row: int, col: int):
+        """ Returns all adjacent, even diagonal, values, that are valid within
+        the board. """
+        offset_list = [(-1, -1), (-1, 0), (-1, 1),
+                       (0, -1),           (0, 1),
+                       (1, -1),  (1, 0),  (1, 1)]
+        cell_adjacent_values = []
+        for offset in offset_list:
+            adjacent_row, adjacent_col = row + offset[0], col + offset[1]
+            # checks for each cell if it's in the board
+            if 0 <= adjacent_row <= 9 and 0 <= adjacent_col <= 9: 
+                cell_adjacent_values.append((self.board[adjacent_row][adjacent_col], 
+                                            adjacent_row, adjacent_col))
+        return cell_adjacent_values
+    
+
+    def adjacent_diagonal_values(self, row: int, col: int):
+        """ Returns all adjacent diagonal values, that are valid within
+        the board. """
+        offset_list = [(-1, -1), (-1, 1),
+                       (1, -1),  (1, 1)]
+        cell_adjacent_values = []
+        for offset in offset_list:
+            adjacent_row, adjacent_col = row + offset[0], col + offset[1]
+            # checks for each cell if it's in the board
+            if 0 <= adjacent_row <= 9 and 0 <= adjacent_col <= 9:
+                cell_adjacent_values.append((self.board[adjacent_row][adjacent_col], 
+                                            adjacent_row, adjacent_col))
+        return cell_adjacent_values
+    
+
+    def adjacent_vertical_values(self, row: int, col: int):
+        if row == 0:
+            return [(self.board[row + 1][col], row+1, col)]
+        elif row == 9:
+            return [(self.board[row - 1][col], row-1, col)]
         else:
-            return (self.board[row][col - 1], self.board[row][col + 1])
+            return [(self.board[row - 1][col], row-1, col), 
+                    (self.board[row + 1][col], row+1, col)]
+#
+#
+    def adjacent_horizontal_values(self, row: int, col: int):
+        if col == 0:
+            return [(self.board[row][col + 1], row, col+1)]
+        elif col == 9:
+            return [(self.board[row][col - 1], row, col-1)]
+        else:
+            return [(self.board[row][col - 1], row, col-1),
+                    (self.board[row][col + 1], row, col+1)]
 
     def print_board(self):
         for i in range(10):
@@ -147,8 +181,7 @@ class Board:
                 boats_rows[x] += 1
                 boats_cols[y] += 1
                 
-
-        return Board(rows, cols, board, boats_rows, boats_cols, hints)
+        return Board(rows, cols, board, boats_rows, boats_cols), hints
 
     def test_goal(self):
         #TODO falta implementar o numero de barcos total
@@ -164,31 +197,159 @@ class Board:
         return True
 
 
-    # TODO: outros metodos da classe
-
-    def initial_check(self):
+    def pre_processing(self, hints):
         self.fill_water()
-        for i in self.hints:
+        for i in hints:
             if i[2] != "W":
                 row = i[0]
                 col = i[1]
-                self.initial_place_water_around_boat(row, col)
-        self.check_boats_on_board()
-        self.print_board()
+                self.handle_hint(row, col)
+        self.check_boats_on_board(hints)
+        #change = False
+        #while not change:
+        #    
+        #    # after placing the hints, the extra pieces and the water around,
+        #    # checks if we can fill any lines or columns
+        #    x1 = self.check_fill_lines()
+        #    x2 = self.check_boats_on_board(hints)
+        #    change = any((x1, x2))
+        #    #self.print_board()
+        #    #print()
 
-    def fill_water_row(self, row):
+
+    def initial_handle_C_boat(self, row: int, col: int):
+        adjacent_cells = self.adjacent_cell_values(row, col)
+        #print(adjacent_cells)
+        for i in range(len(adjacent_cells)):
+            if adjacent_cells[i][0] == " ":
+                self.board[adjacent_cells[i][1]][adjacent_cells[i][2]] = "."
+                self.check_fill_water_row(row)
+                self.check_fill_water_col(col)
+
+
+    def initial_handle_T_boat(self, row: int, col: int):
+        if row != 9 and self.board[row+1][col] == " ":
+            self.board[row+1][col] = "?"
+            self.boats_cols[col] += 1
+            self.boats_rows[row+1] += 1
+            self.check_fill_water_col(col)
+            self.check_fill_water_row(row+1)
+        adjacent_cells = self.adjacent_cell_values(row, col)
+        #print(adjacent_cells)
+        for i in range(len(adjacent_cells)):
+            if adjacent_cells[i][0] == " ":
+                self.board[adjacent_cells[i][1]][adjacent_cells[i][2]] = "."
+    
+
+    def initial_handle_B_boat(self, row: int, col: int):
+        if row != 0 and self.board[row-1][col] == " ":
+            self.board[row-1][col] = "?"
+            self.boats_cols[col] += 1
+            self.boats_rows[row-1] += 1
+            self.check_fill_water_col(col)
+            self.check_fill_water_row(row-1)
+        adjacent_cells = self.adjacent_cell_values(row, col)
+        #print(adjacent_cells)
+        for i in range(len(adjacent_cells)):
+            if adjacent_cells[i][0] == " ":
+                self.board[adjacent_cells[i][1]][adjacent_cells[i][2]] = "."
+
+
+    def initial_handle_L_boat(self, row: int, col: int):
+        if col != 9 and self.board[row][col+1] == " ":
+            self.board[row][col+1] = "?"
+            self.boats_rows[row] += 1
+            self.boats_cols[col+1] += 1
+            self.check_fill_water_row(row)
+            self.check_fill_water_col(col+1)
+        adjacent_cells = self.adjacent_cell_values(row, col)
+        #print(adjacent_cells)
+        for i in range(len(adjacent_cells)):
+            if adjacent_cells[i][0] == " ":
+                self.board[adjacent_cells[i][1]][adjacent_cells[i][2]] = "."
+        
+
+    def initial_handle_R_boat(self, row: int, col: int):
+        if col != 0 and self.board[row][col-1] == " ":
+            self.board[row][col-1] = "?"
+            self.boats_rows[row] += 1
+            self.boats_cols[col-1] += 1
+            self.check_fill_water_row(row)
+            self.check_fill_water_col(col-1)
+        adjacent_cells = self.adjacent_cell_values(row, col)
+        #print(adjacent_cells)   
+        for i in range(len(adjacent_cells)):
+            if adjacent_cells[i][0] == " ":
+                self.board[adjacent_cells[i][1]][adjacent_cells[i][2]] = "."
+
+        
+    def initial_handle_M_boat(self, row: int, col: int):
+        # adds water to the diagonals if they are empty: this can always be done
+        diagonal_cells = self.adjacent_diagonal_values(row, col)
+        for cell in diagonal_cells:
+            if cell[0] == " ":
+                self.board[cell[1]][cell[2]] = "."  
+        # checks if there is water above or under the piece
+        if row - 1 == -1 or row + 1 == 10 or \
+        self.board[row - 1][col] in (".", "W") or \
+        self.board[row + 1][col] in (".", "W"):
+            # adds pieces if the up/down cell is empty
+            if col != 9 and self.board[row][col+1] == " ":
+                self.board[row][col+1] = "?"
+                self.boats_cols[col+1] += 1
+                self.boats_rows[row] += 1
+                self.check_fill_water_col(col+1)
+            if col != 0 and self.board[row][col-1] == " ":
+                self.board[row][col-1] = "?"
+                self.boats_cols[col-1] += 1
+                self.boats_rows[row] += 1
+                self.check_fill_water_col(col-1)
+            self.check_fill_water_row(row)
+            # adds water to the remaining adjacent empty cells
+            adjacent_cells = self.adjacent_cell_values(row, col)
+            #print(adjacent_cells)
+            for cell in adjacent_cells:
+                if cell[0] == " ":
+                    self.board[cell[1]][cell[2]] = "."
+
+        # checks if there is water to the left or to the right of the piece
+        elif col - 1 == -1 or col + 1 == 10 or \
+        self.board[row][col - 1] in (".", "W") or \
+        self.board[row][col + 1] in (".", "W"):
+            # adds pieces if the left/right cell is empty
+            if row != 9 and self.board[row+1][col] == " ":
+                self.board[row+1][col] = "?"
+                self.boats_cols[col] += 1
+                self.boats_rows[row+1] += 1
+                self.check_fill_water_row(row+1)
+            if row != 0 and self.board[row-1][col] == " ":
+                self.board[row-1][col] = "?"
+                self.boats_cols[col] += 1
+                self.boats_rows[row-1] += 1
+                self.check_fill_water_row(row-1)
+            self.check_fill_water_col(col)
+            # adds water to the remaining adjacent empty cells
+            adjacent_cells = self.adjacent_cell_values(row, col)
+            for i in range(len(adjacent_cells)):
+                if adjacent_cells[i][0] == " ":
+                    self.board[adjacent_cells[i][1]][adjacent_cells[i][2]] = "."
+
+
+    def check_fill_water_row(self, row):
         #check if the row is full of boats
         if self.rows[row] == self.boats_rows[row]:
             for i in range(10):
                 if self.board[row][i] == " ":
                     self.board[row][i] = "."
 
-    def fill_water_col(self, col):
+
+    def check_fill_water_col(self, col):
         #check if the col is full of boats
         if self.cols[col] == self.boats_cols[col]:
             for i in range(10):
                 if self.board[i][col] == " ":
                     self.board[i][col] = "."
+
 
     def fill_water(self):
         #this is done 1 time, in the initial check
@@ -201,8 +362,64 @@ class Board:
                 for j in range(10):
                     if self.board[j][i] == " ":
                         self.board[j][i] = "."
-    
-            
+                            
+                        
+    def check_fill_lines(self):
+        """" Checks if any column or row can be deterministically 
+        filled with boat pieces. """
+        # this function returns a change variable, if any change to the 
+        # board was made; so, we must initialize change to False and change it  
+        # to True if any change is made
+        change = False
+        consecutives_row, consecutives_col = 0, 0
+        empties_row, empties_col = 0, 0
+        lst = []
+        for i in range(10):
+            lst = []
+            consecutives_row, consecutives_col = 0, 0
+            empties_row, empties_col = 0, 0
+            for j in range(10):
+                if self.board[i][j] not in (".", "W"): 
+                    consecutives_row += 1
+                    if self.board[i][j] == " ":
+                        empties_row += 1
+                else: 
+                    # we only allow deterministic fillings: if there are no
+                    # empty cells there is nothing to fill, if there are more 
+                    # than 4 consecutives, it isn't deterministic
+                    if consecutives_row != 0 and consecutives_row < 5:
+                        lst.append((i, j, consecutives_row))
+                        consecutives_row = 0
+                if self.board[j][i] not in (".", "W"): 
+                    consecutives_col += 1 
+                    if self.board[i][j] == " ":
+                        empties_col += 1
+                else: 
+                    if consecutives_col != 0 and consecutives_row < 5:
+                        lst.append((i, j, consecutives_col))
+                        consecutives_col = 0
+            if self.rows[i] - self.boats_rows[i] == empties_row:
+                # places boat pieces on all empty cells
+                for cell in lst:
+                    if self.board[cell[0]][cell[1]] == " ":
+                        adjacents = []
+                        self.board[cell[0]][cell[1]] = "?"
+                        self.boats_rows[cell[0]] += 1
+                        self.boats_cols[cell[1]] += 1
+                        self.place_water_around_unknown_piece(cell[0], cell[1], "row")
+                        change = True
+            if self.cols[i] - self.boats_cols[i] == empties_col:
+                # places boat pieces on all empty cells
+                for cell in lst:
+                    if self.board[cell[0]][cell[1]] == " ":
+                        self.board[cell[0]][cell[1]] = "?"
+                        self.boats_rows[cell[0]] += 1
+                        self.boats_cols[cell[1]] += 1
+                        self.place_water_around_unknown_piece(cell[0], cell[1], "col")
+                        change = True
+        return change
+
+
     def place_water_around_boat(self, row: int, col: int, boat: str, size = 0):
         if boat == "C":
             self.water_C_boat(row, col)
@@ -241,6 +458,7 @@ class Board:
         if col + size < 10:
             self.check_col_incomplete(col + size)
 
+
     def water_L_boat(self, row, col, size):
         for i in range(row - 1, row + 2):
             for j in range(col - 1, col + size + 1):
@@ -259,6 +477,7 @@ class Board:
         if row + size < 10:
             self.check_row_incomplete(row + size)
 
+
     def check_row_incomplete(self, row):
         n_spaces_left = 0
         for i in range(10):
@@ -266,6 +485,7 @@ class Board:
                 n_spaces_left += 1
         if n_spaces_left < self.rows[row] - self.boats_rows[row]:
             self.bad_board = True
+
 
     def check_col_incomplete(self, col):
         n_spaces_left = 0
@@ -276,117 +496,142 @@ class Board:
             self.bad_board = True
 
 
-    def initial_place_water_around_boat(self, row: int, col: int):
-        boat = self.board[row][col]
-        if boat == "C": 
-            for i in range(row - 1, row + 2):
-                for j in range(col - 1, col + 2):
-                    if i >= 0 and i < 10 and j >= 0 and j < 10:
-                        if self.board[i][j] == " ":
-                            self.board[i][j] = "."
+    def handle_hint(self, row: int, col: int):
+        boat_piece = self.board[row][col]
+        switch_case_list = {
+            "C": self.initial_handle_C_boat,
+            "T": self.initial_handle_T_boat,
+            "L": self.initial_handle_L_boat,
+            "B": self.initial_handle_B_boat,
+            "R": self.initial_handle_R_boat,
+            "M": self.initial_handle_M_boat
+        }
+        switch_case_list[boat_piece](row, col)
 
-        elif boat == "T":
-            for i in range(row - 1, row + 3):
-                for j in range(col - 1, col + 2):
-                    if i >= 0 and i < 10 and j >= 0 and j < 10:
-                        if not (j == col and i > row):
-                            if self.board[i][j] == " ":
-                                self.board[i][j] = "."
-            if self.board[row+1][col] == " ":
-                self.board[row+1][col] = "?"
-                self.boats_cols[col] += 1
-                self.boats_rows[row+1] += 1
-                self.fill_water_col(col)
-                self.fill_water_row(row+1)
-            
 
-        elif boat == "B":
-            for i in range(row - 2, row + 2):
-                for j in range(col - 1, col + 2):
-                    if i >= 0 and i < 10 and j >= 0 and j < 10:
-                        if not (j == col and i < row):
-                            if self.board[i][j] == " ":
-                                self.board[i][j] = "."
-            if self.board[row-1][col] == " ":
-                self.board[row-1][col] = "?"
-                self.boats_cols[col] += 1
-                self.boats_rows[row-1] += 1
-                self.fill_water_col(col)
-                self.fill_water_row(row-1)
+        #if boat == "C": 
+        #    for i in range(row - 1, row + 2):
+        #        for j in range(col - 1, col + 2):
+        #            if i >= 0 and i < 10 and j >= 0 and j < 10:
+        #                if self.board[i][j] == " ":
+        #                    self.board[i][j] = "."
+#
+        #elif boat == "T":
+        #    for i in range(row - 1, row + 3):
+        #        for j in range(col - 1, col + 2):
+        #            if i >= 0 and i < 10 and j >= 0 and j < 10:
+        #                if not (j == col and i > row):
+        #                    if self.board[i][j] == " ":
+        #                        self.board[i][j] = "."
+        #    if self.board[row+1][col] == " ":
+        #        self.board[row+1][col] = "?"
+        #        self.boats_cols[col] += 1
+        #        self.boats_rows[row+1] += 1
+        #        self.check_fill_water_col(col)
+        #        self.check_fill_water_row(row+1)
+        #    
+#
+        #elif boat == "B":
+        #    for i in range(row - 2, row + 2):
+        #        for j in range(col - 1, col + 2):
+        #            if i >= 0 and i < 10 and j >= 0 and j < 10:
+        #                if not (j == col and i < row):
+        #                    if self.board[i][j] == " ":
+        #                        self.board[i][j] = "."
+        #    if self.board[row-1][col] == " ":
+        #        self.board[row-1][col] = "?"
+        #        self.boats_cols[col] += 1
+        #        self.boats_rows[row-1] += 1
+        #        self.check_fill_water_col(col)
+        #        self.check_fill_water_row(row-1)
+#
+        #elif boat == "R":
+        #    for i in range(row - 1, row + 2):
+        #        for j in range(col - 2, col + 2):
+        #            if i >= 0 and i < 10 and j >= 0 and j < 10:
+        #                if not (i == row and j < col):
+        #                    if self.board[i][j] == " ":
+        #                        self.board[i][j] = "."
+        #    if self.board[row][col-1] == " ":
+        #        self.board[row][col-1] = "?"
+        #        self.boats_cols[col-1] += 1
+        #        self.boats_rows[row] += 1
+        #        self.check_fill_water_col(col-1)
+        #        self.check_fill_water_row(row)
+#
+        #elif boat == "L":
+        #    for i in range(row - 1, row + 2):
+        #        for j in range(col - 1, col + 3):
+        #            if i >= 0 and i < 10 and j >= 0 and j < 10:
+        #                if not (i == row and j > col):
+        #                    if self.board[i][j] == " ":
+        #                        self.board[i][j] = "."
+        #    if self.board[row][col+1] == " ":
+        #        self.board[row][col+1] = "?"
+        #        self.boats_cols[col+1] += 1
+        #        self.boats_rows[row] += 1
+        #        self.check_fill_water_col(col+1)
+        #        self.check_fill_water_row(row)
+#
+        #elif boat == "M":
+        #    # checks if there is water above or under the piece
+        #    if  row - 1 == -1 or row + 1 == 10 or \
+        #        self.board[row - 1][col] == "." or self.board[row + 1][col] == ".":
+        #        for i in range(row - 1, row + 2):
+        #            for j in range(col - 2, col + 3):
+        #                if i >= 0 and i < 10 and j >= 0 and j < 10 and i != row:
+        #                    if self.board[i][j] == " ":
+        #                        self.board[i][j] = "."
+        #        # adds pieces if the up/down cell is empty
+        #        if self.board[row][col+1] == " ":
+        #            self.board[row][col+1] = "?"
+        #            self.boats_cols[col+1] += 1
+        #            self.boats_rows[row] += 1
+        #            self.check_fill_water_col(col+1)
+        #        if self.board[row][col-1] == " ":
+        #            self.board[row][col-1] = "?"
+        #            self.boats_cols[col-1] += 1
+        #            self.boats_rows[row] += 1
+        #            self.check_fill_water_col(col-1)
+        #        self.check_fill_water_row(row)
+#
+        #    # checks if there is water to the left or to the right of the piece
+        #    elif col - 1 == -1 or col + 1 == 10 or \
+        #        self.board[row][col - 1] == "." or self.board[row][col + 1] == ".":
+        #        for i in range(row - 2, row + 3):
+        #            for j in range(col - 1, col + 2):
+        #                if i >= 0 and i < 10 and j >= 0 and j < 10 and j != col:
+        #                    if self.board[i][j] == " ":
+        #                        self.board[i][j] = "."
+        #        # adds pieces if the left/right cell is empty
+        #        if self.board[row+1][col] == " ":
+        #            self.board[row+1][col] = "?"
+        #            self.boats_cols[col] += 1
+        #            self.boats_rows[row+1] += 1
+        #            self.check_fill_water_row(row+1)
+        #        if self.board[row-1][col] == " ":
+        #            self.board[row-1][col] = "?"
+        #            self.boats_cols[col] += 1
+        #            self.boats_rows[row-1] += 1
+        #            self.check_fill_water_row(row-1)
+        #        self.check_fill_water_col(col)
 
-        elif boat == "R":
-            for i in range(row - 1, row + 2):
-                for j in range(col - 2, col + 2):
-                    if i >= 0 and i < 10 and j >= 0 and j < 10:
-                        if not (i == row and j < col):
-                            if self.board[i][j] == " ":
-                                self.board[i][j] = "."
-            if self.board[row][col-1] == " ":
-                self.board[row][col-1] = "?"
-                self.boats_cols[col-1] += 1
-                self.boats_rows[row] += 1
-                self.fill_water_col(col-1)
-                self.fill_water_row(row)
 
-        elif boat == "L":
-            for i in range(row - 1, row + 2):
-                for j in range(col - 1, col + 3):
-                    if i >= 0 and i < 10 and j >= 0 and j < 10:
-                        if not (i == row and j > col):
-                            if self.board[i][j] == " ":
-                                self.board[i][j] = "."
-            if self.board[row][col+1] == " ":
-                self.board[row][col+1] = "?"
-                self.boats_cols[col+1] += 1
-                self.boats_rows[row] += 1
-                self.fill_water_col(col+1)
-                self.fill_water_row(row)
+    def place_water_around_unknown_piece(self, row: int, col: int, direction: str):
+        neighbours = self.adjacent_diagonal_values(row, col)
+        if direction == "row":
+            neighbours.extend(self.adjacent_vertical_values(row, col))
+        else:
+            neighbours.extend(self.adjacent_horizontal_values(row, col))
+        for cell in neighbours:
+            if cell[0] == " ":
+                self.board[cell[1]][cell[2]] = "."
+        #TODO verificar bad board?    
 
-        elif boat == "M":
-            # checks if there is water above or under the piece
-            if  row - 1 == -1 or row + 1 == 10 or \
-                self.board[row - 1][col] == "." or self.board[row + 1][col] == ".":
-                for i in range(row - 1, row + 2):
-                    for j in range(col - 2, col + 3):
-                        if i >= 0 and i < 10 and j >= 0 and j < 10 and i != row:
-                            if self.board[i][j] == " ":
-                                self.board[i][j] = "."
-                # adds pieces if the up/down cell is empty
-                if self.board[row][col+1] == " ":
-                    self.board[row][col+1] = "?"
-                    self.boats_cols[col+1] += 1
-                    self.boats_rows[row] += 1
-                    self.fill_water_col(col+1)
-                if self.board[row][col-1] == " ":
-                    self.board[row][col-1] = "?"
-                    self.boats_cols[col-1] += 1
-                    self.boats_rows[row] += 1
-                    self.fill_water_col(col-1)
-                self.fill_water_row(row)
 
-            # checks if there is water to the left or to the right of the piece
-            elif col - 1 == -1 or col + 1 == 10 or \
-                self.board[row][col - 1] == "." or self.board[row][col + 1] == ".":
-                for i in range(row - 2, row + 3):
-                    for j in range(col - 1, col + 2):
-                        if i >= 0 and i < 10 and j >= 0 and j < 10 and j != col:
-                            if self.board[i][j] == " ":
-                                self.board[i][j] = "."
-                # adds pieces if the left/right cell is empty
-                if self.board[row+1][col] == " ":
-                    self.board[row+1][col] = "?"
-                    self.boats_cols[col] += 1
-                    self.boats_rows[row+1] += 1
-                    self.fill_water_row(row+1)
-                if self.board[row-1][col] == " ":
-                    self.board[row-1][col] = "?"
-                    self.boats_cols[col] += 1
-                    self.boats_rows[row-1] += 1
-                    self.fill_water_row(row-1)
-                self.fill_water_col(col)
 
-    def check_boats_on_board(self):
-        for h in self.hints:
+    def check_boats_on_board(self, hints):
+        for h in hints:
             i = int(h[0])
             j = int(h[1])
             n = h[2]
@@ -401,7 +646,6 @@ class Board:
                         self.boats_on_board["3"] += 1
                     elif self.board[i+2][j] == "M" and self.board[i+3][j] == "B":
                         self.boats_on_board["4"] += 1
-
             elif n == "L":
                 if self.board[i][j+1] == "R":
                     self.boats_on_board["2"] += 1
@@ -410,7 +654,9 @@ class Board:
                         self.boats_on_board["3"] += 1
                     elif self.board[i][j+2] == "M" and self.board[i][j+3] == "B":
                         self.boats_on_board["4"] += 1
+            
                 
+
     def endgame(self):
         for i in range(10):
             n_row = 0
@@ -428,7 +674,7 @@ class Board:
                         self.boats_cols[j] += 1
                         self.boats_on_board["1"] += 1
                         self.place_water_around_boat(i,j,"C")
-                        self.fill_water_col(j)
+                        self.check_fill_water_col(j)
             if n_col == self.cols[i] - self.boats_cols[i]:
                 for j in range(10):
                     if self.board[j][i] == " ":
@@ -437,7 +683,7 @@ class Board:
                         self.boats_cols[i] += 1
                         self.boats_on_board["1"] += 1
                         self.place_water_around_boat(j,i,"C")
-                        self.fill_water_row(j)
+                        self.check_fill_water_row(j)
         if self.test_goal():
             return True
         else:
@@ -455,14 +701,14 @@ class Board:
         for i in range(boat_size):
             if board1.board[row][col+i] == " ":
                 board1.board[row][col+i] = boat[boat_size-1][i]
-                board1.fill_water_col(col+i)
+                board1.check_fill_water_col(col+i)
                 board1.boats_cols[col+i] += 1
                 board1.boats_rows[row] += 1
             elif board1.board[row][col+i] == "?":
                 board1.board[row][col+i] = boat[boat_size-1][i]
             
 
-        board1.fill_water_row(row)
+        board1.check_fill_water_row(row)
 
         board1.boats_on_board[str(boat_size)] += 1
         board1.water_L_boat(row, col, boat_size)
@@ -479,19 +725,20 @@ class Board:
         for i in range(boat_size):
             if board1.board[row+i][col] == " ":
                 board1.board[row+i][col] = boat[boat_size-1][i]
-                board1.fill_water_row(row+i)
+                board1.check_fill_water_row(row+i)
                 board1.boats_cols[col] += 1
                 board1.boats_rows[row+i] += 1
             elif board1.board[row+i][col] == "?":
                 board1.board[row+i][col] = boat[boat_size-1][i]
         
-        board1.fill_water_col(col)
+        board1.check_fill_water_col(col)
         
         board1.boats_on_board[str(boat_size)] += 1
         board1.water_T_boat(row, col, boat_size)
         board1.fill_water()
         return board1
-
+    
+    
     def action_boat1(self):
         actions = []
         for i in range(10):
@@ -499,6 +746,7 @@ class Board:
                 if self.board[i][j] == " ":
                     actions.append([i,j,1,"d"])
         return actions
+    
     
     def action_boat2(self):
         actions = []
@@ -514,6 +762,7 @@ class Board:
                             actions.append([j,i,2,"d"])
         return actions
     
+
     def action_boat3(self):
         actions = []
         for i in range(10):
@@ -529,6 +778,7 @@ class Board:
                             if self.board[j+2][i] in (" ", "?", "B"):
                                 actions.append([j,i,3,"d"])
         return actions
+
 
     def action_boat4(self):
         actions = []
@@ -573,10 +823,6 @@ class Bimaru(Problem):
         if board.bad_board == True:
             return actions
 
-        #if state in self.previousStates:
-        #    return actions
-        #else:
-        #    self.previousStates.add(state)
 
         if board.boats_on_board["4"] < 1:
             actions += state.board.action_boat4()
@@ -594,9 +840,9 @@ class Bimaru(Problem):
             else:
                 actions += state.board.action_boat1()
         return actions
-            
-
-
+                                                                                            
+                                                                                
+                                                                                
     def result(self, state: BimaruState, action):
         """Retorna o estado resultante de executar a 'action' sobre
         'state' passado como argumento. A ação a executar deve ser uma
@@ -631,11 +877,9 @@ if __name__ == "__main__":
     # Usar uma técnica de procura para resolver a instância,
     # Retirar a solução a partir do nó resultante,
     # Imprimir para o standard output no formato indicado.
-    #profile = cProfile.Profile()
-    #profile.enable()
 
-    x = Board.parse_instance() 
-    x.initial_check()
+    x, hints = Board.parse_instance()
+    x.pre_processing(hints)
     problem = Bimaru(x)
     res = depth_first_tree_search(problem)
     if res:
@@ -643,6 +887,4 @@ if __name__ == "__main__":
     else:
         print("board not printed")
     
-    #profile.disable()
-    #profile.print_stats(sort='time')
 

@@ -5,7 +5,7 @@ import numpy
 import re
 import time
 
-tests_folder = "./Privado - Testes"
+tests_folder = "./Privados"
 results_folder = "./Tester outputs"
 bimaru_script = "./bimaru.py"
 errors_in_tests = []
